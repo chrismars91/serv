@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title></title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+        <link rel="stylesheet" href="/static/styles/styles.css">
+    <style>
+    </style>
+    </head>
+    <body>
+        <canvas id="canvas"></canvas>
+        <div class="log-panel">
+            <div class="log-header">
+                <span class="log-title">Log</span>
+                <div class="log-header-buttons">
+                    <span class="log-clear" id="log-clear">clear</span>
+                    <button class="log-toggle" id="log-toggle">−</button>
+                </div>
+            </div>
+            <div class="log-content" id="log-content"></div>
+        </div>
+        <div id="simulation-control-panel">
+            <!-- Step controls -->
+            <div class="simulation-control-block">
+                <div class="step-buttons">
+                    <button id="backward">⏪</button>
+                    <button id="fast-forward">⏩</button>
+                </div>
+                <span id="step-size"
+                      data-contentdraggable
+                      data-minnum="1"
+                      data-maxnum="100"
+                      data-step="1">
+                  step Size = 1
+                </span>
+            </div>
+            <!-- Play/Pause -->
+            <div class="simulation-control-block">
+                <button id="play-pause">⏯</button>
+                <span id="play-pause-span">Pause</span>
+            </div>
+            <!-- Elapsed Time -->
+            <div class="simulation-control-block">
+                <div id="elapsed-time" class="elapsed-time">0</div>
+                <span>Time [minutes]</span>
+            </div>
+        </div>
+
+
+        <script src="{{url_for('static',filename='jsrc/three.module.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/OrbitControls.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/stats.module.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/SunComponent.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/Physics.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/SpaceModeling.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/PointInMesh.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/Utils.js')}}"></script>
+        <script type="module">
+
+// BASIC SETUP
+// ==================================================================================
+
+const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, .0001, 10000);
+camera.position.set(1, 2, 3);
+const scene = new Scene();
+const group = new Group();
+scene.add(group);
+scene.background = new Color(0.5 * .025, 0.7 * .025, 0.9 * .025);
+
+const renderer = new WebGLRenderer({ antialias: true, canvas: document.getElementById("canvas") });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+
+const clock = new Clock();
+const stats = new Stats();
+stats.showPanel( 0 );
+document.body.appendChild( stats.dom );
+
+
+// MODEL
+// ==================================================================================
+
+//untis
+const KM2S   = 1/10000;         // km to scene units
+const EOMEGA = 0.00007292115;   // 2pi/sidereal
+
+//sun
+const sunPosition = new Vector3(1500, 150, 500);
+const sun = new Sun();
+sun.setPosition(sunPosition);
+sun.setModelOne(
+    '/static/assets/lens_flare_1.jpeg',
+    '/static/assets/lens_flare_circle_64x64.jpeg',
+    '/static/assets/lens_flare_hexagon_256x256.jpeg'
+);
+scene.add( new AmbientLight( 0x222222, 6 ) );
+scene.add(sun);
+
+//earth
+const earthTexture = new TextureLoader().load('static/assets/uv_map_with_borders.png')
+const earthMat = new MeshPhongMaterial( {
+    map: earthTexture,
+    color: 0xffffff, 
+    flatShading: true,
+    transparent: true,
+    opacity: 0.9,
+} );
+const earth = new Mesh( new SphereGeometry( 6378*KM2S, 12, 8 ), earthMat );
+scene.add( earth );
+
+//propagator
+const propagator = new RK45Propagator();
+
+//logger
+const logger = new Logger();
+
+
+// RAYCASTING
+// ==================================================================================
+const raycaster = new Raycaster();
+let INTERSECTED;
+let TOOLTIP;
+const pointer = new Vector2();
+pointer.clientX = 0;
+pointer.clientY = 0;
+function createToolTip(text) {
+    TOOLTIP = document.createElement("div");
+    TOOLTIP.className = "tooltip";
+    TOOLTIP.textContent = text;
+    document.body.appendChild(TOOLTIP);
+}
+
+function removeToolTip() {
+    if (TOOLTIP) {TOOLTIP.remove();TOOLTIP = null};
+}
+
+function moveToolTip() {
+    TOOLTIP.style.left = `${pointer.clientX + 10}px`;
+    TOOLTIP.style.top = `${pointer.clientY + 10}px`;
+}
+
+const intersections = [];
+
+
+const satelliteData = {{ satellites | safe }};
+const groundStationsData = {{ groundStations| safe }};
+
+function createSatellitesFromData(satellites) {
+    const satelliteObjects = [];
+    const trajectories = [];
+    satellites.forEach((satData, index) => {
+        const semiMajorAxis = satData.semiMajorAxis;
+        const eccentricity = satData.eccentricity;
+        const inclination = satData.inclination * Math.PI / 180;
+        const raan = satData.raan * Math.PI / 180;
+        const argPeriapsis = satData.argPeriapsis * Math.PI / 180;
+        const trueAnomaly = satData.trueAnomaly * Math.PI / 180;
+        const color = parseInt(satData.color.replace('#', '0x'));
+        const satellite = new SatelliteSprite(color);
+        satellite.name = satData.name;
+        satellite.setState(elementsToState(
+            semiMajorAxis, 
+            eccentricity, 
+            inclination, 
+            argPeriapsis, 
+            raan, 
+            trueAnomaly
+        ));
+        scene.add(satellite);
+        satellite.position.set(
+            satellite.state[0] * KM2S, 
+            satellite.state[1] * KM2S, 
+            satellite.state[2] * KM2S);
+        satellite.radarStates = new Map();
+        satelliteObjects.push(satellite);
+        const trajectory = new EciTrajectory(propagator, color);
+        scene.add(trajectory);
+        trajectory.generateTrajectory(satellite.getStateDeepCopy());
+        trajectories.push(trajectory);
+        intersections.push(satellite)
+    });
+    return { satellites: satelliteObjects, trajectories: trajectories };
+}
+const { 
+    satellites: dynamicSatellites, 
+    trajectories: dynamicTrajectories } = createSatellitesFromData(satelliteData);
+
+
+function createGroundStationsFromData(radars) {
+    const radarObjects = [];
+    radars.forEach((radarData, index) => {
+        const lat = radarData.lat;
+        const lon = radarData.lon;
+        const start_r = radarData.start_r;
+        const end_r = radarData.end_r;
+        const dPhi = radarData.dPhi;
+        const dTheta = radarData.dTheta;
+        const name = radarData.name;
+        const color = parseInt(radarData.color.replace('#', '0x'));
+        const groundStation = new GroundStation(
+            lat, 
+            lon, 
+            start_r, 
+            end_r, 
+            dPhi, 
+            dTheta, 
+            name, 
+            color
+        );
+        
+        earth.add(groundStation);
+        radarObjects.push(groundStation);
+        intersections.push(groundStation.baseMesh);
+
+        const pimc = new PointInMeshChecker();
+        groundStation.pimc = pimc;
+
+
+    });
+    
+    return radarObjects;
+}
+
+const dynamicGroundStations = createGroundStationsFromData(groundStationsData);
+
+
+
+
+const simDt = 2;
+let simStep = 1;                // every thing happens in seconds ¯\_(ツ)_/¯
+let simPlay = false;
+let simTime = 0;
+const radarSimTimer = 60*5;
+
+const elapsedTimeLabel = document.getElementById('elapsed-time');
+
+function animate() {
+    const dt = clock.getDelta();
+    const time = clock.getElapsedTime();
+
+
+
+    if (simPlay) {
+        for(let i = 0; i < simStep; i += 1) {
+            earth.rotation.y += simDt * EOMEGA;
+            simTime += simDt;
+
+            dynamicSatellites.forEach(satellite => {
+                satellite.position.set(
+                    satellite.state[0] * KM2S,
+                    satellite.state[1] * KM2S,
+                    satellite.state[2] * KM2S
+                );
+                propagator.step(satellite.state, simDt);
+            });
+
+            if (simTime % radarSimTimer === 0)
+            {
+                dynamicGroundStations.forEach(radar => {
+                    radar.setWorldPos();
+                    dynamicSatellites.forEach(satellite => {
+                        radar.pimc.setPointWorld(
+                            satellite.state[0] * KM2S, 
+                            satellite.state[1] * KM2S,
+                            satellite.state[2] * KM2S
+                        );
+                        const wasInMesh = satellite.radarStates.get(radar.name) || false;
+                        radar.pimc.isPointInsideMesh(radar.mesh);
+                        const currentlyInMesh = radar.pimc.inMesh;
+                        satellite.radarStates.set(radar.name, currentlyInMesh);
+                        if(currentlyInMesh && !wasInMesh) {
+                            logger.log(`${satellite.name} entered ${radar.name}`, "green"); 
+                        }
+                        if(!currentlyInMesh && wasInMesh) {
+                            logger.log(`${satellite.name} left ${radar.name}`, "yellow"); 
+                        }
+                    });
+                });
+            }
+
+        } 
+
+        elapsedTimeLabel.textContent = Math.floor(simTime/60);
+    }
+
+
+
+    raycaster.setFromCamera( pointer, camera );
+    const intersects = raycaster.intersectObjects( intersections, false );
+    if ( intersects.length > 0 ) {
+        if ( INTERSECTED != intersects[ 0 ].object ) {
+
+            if ( INTERSECTED ){ removeToolTip(); }; 
+            INTERSECTED = intersects[ 0 ].object;
+
+            if (INTERSECTED.objectToolTip) {
+                createToolTip(INTERSECTED.name)
+            }
+        }
+        else
+        {
+            if (TOOLTIP){moveToolTip();}
+        }
+    } else {
+        if ( INTERSECTED ) {removeToolTip();};
+        INTERSECTED = null;
+    }
+
+    stats.update();
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+animate();
+
+// EVENT LISTENER(S)
+// ==================================================================================
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function onPointerMove(event) {
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    pointer.clientX = event.clientX;
+    pointer.clientY = event.clientY;
+}
+
+window.addEventListener( 'pointermove', onPointerMove );
+window.addEventListener("click", function() {
+    if (INTERSECTED)
+    {
+        INTERSECTED.handleObjectClick()
+    }
+});
+
+// SIMULATION SLIDER
+// ==================================================================================
+const playPauseBtn = document.getElementById("play-pause");
+const fastForwardBtn = document.getElementById("fast-forward");
+const backwardBtn = document.getElementById("backward");
+const stepSizeSpan = document.getElementById("step-size");
+const playPauseSpan = document.getElementById("play-pause-span");
+
+playPauseBtn.addEventListener("click", () => {
+    simPlay = !simPlay;
+    if (simPlay){ playPauseSpan.textContent = "Play"; }
+    else{ playPauseSpan.textContent = "Pause"; }
+});
+
+fastForwardBtn.addEventListener("click", () => {
+    simPlay = true;
+    simStep += 10;
+    if (simStep > 100) { simStep = 100; }
+    updateStepSize(simStep);
+});
+
+backwardBtn.addEventListener("click", () => {
+    simPlay = true;
+    if (simStep - 10 > 0) simStep -= 10;
+    updateStepSize(simStep);
+});
+
+let elePos = null;
+let fixedNum = null;
+
+document.body.addEventListener('mousedown', (e) => {
+    const target = e.target;
+    if (target.hasAttribute('data-contentdraggable')) {
+        elePos = e.clientX;
+        fixedNum = parseFloat(target.textContent.replace(/[^\d.]/g, '')) || 1;
+
+        function onMouseMove(ev) {
+            dragNumber(target, ev);
+        }
+
+        function onMouseUp() {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            elePos = null;
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    }
+});
+
+function dragNumber(ele, event) {
+    const currentX = event.clientX;
+    const minNumber = parseFloat(ele.dataset.minnum) || 0;
+    const maxNumber = parseFloat(ele.dataset.maxnum) || 100;
+    const step = parseFloat(ele.dataset.step) || 1;
+
+    if (elePos !== null) {
+        let delta = Math.round((currentX - elePos) / 5) * step;
+        let num = fixedNum + delta;
+
+        if (num < minNumber) num = minNumber;
+        if (num > maxNumber) num = maxNumber;
+
+        updateStepSize(num);
+    }
+}
+
+function updateStepSize(num) {
+    simStep = num;
+    stepSizeSpan.textContent = `step Size = ${simStep}`;
+}
+
+    </script>
+</body>
+</html>

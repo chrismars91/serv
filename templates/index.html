@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title></title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+        <link rel="stylesheet" href="/static/styles/styles.css">
+    <style>
+    </style>
+    </head>
+    <body>
+        <canvas id="canvas"></canvas>
+        <div class="log-panel">
+            <div class="log-header">
+                <span class="log-title">Log</span>
+                <div class="log-header-buttons">
+                    <span class="log-clear" id="log-clear">clear</span>
+                    <button class="log-toggle" id="log-toggle">−</button>
+                </div>
+            </div>
+            <div class="log-content" id="log-content"></div>
+        </div>
+        <div id="simulation-control-panel">
+            <!-- Step controls -->
+            <div class="simulation-control-block">
+                <div class="step-buttons">
+                    <button id="backward">⏪</button>
+                    <button id="fast-forward">⏩</button>
+                </div>
+                <span id="step-size"
+                      data-contentdraggable
+                      data-minnum="1"
+                      data-maxnum="100"
+                      data-step="1">
+                  step Size = 1
+                </span>
+            </div>
+            <!-- Play/Pause -->
+            <div class="simulation-control-block">
+                <button id="play-pause">⏯</button>
+                <span id="play-pause-span">Pause</span>
+            </div>
+            <!-- Elapsed Time -->
+            <div class="simulation-control-block">
+                <div id="elapsed-time" class="elapsed-time">0</div>
+                <span>Time [minutes]</span>
+            </div>
+        </div>
+
+
+        <script src="{{url_for('static',filename='jsrc/three.module.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/OrbitControls.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/stats.module.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/SunComponent.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/Physics.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/SpaceModeling.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/PointInMesh.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/Utils.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/Kalman.js')}}"></script>
+        <script src="{{url_for('static',filename='jsrc/ValladoLambert.js')}}"></script>
+
+        <script type="module">
+
+// BASIC SETUP
+// ==================================================================================
+const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, .0001, 10000);
+camera.position.set(1, 2, 3);
+const scene = new Scene();
+const group = new Group();
+scene.add(group);
+scene.background = new Color(0.5 * .025, 0.7 * .025, 0.9 * .025);
+
+const renderer = new WebGLRenderer({ antialias: true, canvas: document.getElementById("canvas") });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+
+const clock = new Clock();
+const stats = new Stats();
+stats.showPanel( 0 );
+document.body.appendChild( stats.dom );
+
+
+// MODEL
+// ==================================================================================
+//untis
+const KM2S   = 1/10000;         // km to scene units
+const EOMEGA = 0.00007292115;   // 2pi/sidereal
+
+//sun
+const sunPosition = new Vector3(1500, 150, 500);
+const sun = new Sun();
+sun.setPosition(sunPosition);
+sun.setModelOne(
+    '/static/assets/lens_flare_1.jpeg',
+    '/static/assets/lens_flare_circle_64x64.jpeg',
+    '/static/assets/lens_flare_hexagon_256x256.jpeg'
+);
+scene.add( new AmbientLight( 0x222222, 6 ) );
+scene.add(sun);
+
+//earth
+const earthTexture = new TextureLoader().load('static/assets/uv_map_with_borders.png')
+const earthMat = new MeshPhongMaterial( {
+    map: earthTexture,
+    color: 0xffffff, 
+    flatShading: true,
+    transparent: true,
+    opacity: 0.9,
+} );
+const earth = new Mesh( new SphereGeometry( 6378*KM2S, 12, 8 ), earthMat );
+scene.add( earth );
+
+//propagator
+const propagator = new RK45Propagator();
+
+//logger
+const logger = new Logger();
+
+// RAYCASTING
+// ==================================================================================
+const raycaster = new Raycaster();
+let INTERSECTED;
+let TOOLTIP;
+const pointer = new Vector2();
+pointer.clientX = 0;
+pointer.clientY = 0;
+function createToolTip(text) {
+    TOOLTIP = document.createElement("div");
+    TOOLTIP.className = "tooltip";
+    TOOLTIP.textContent = text;
+    document.body.appendChild(TOOLTIP);
+}
+function removeToolTip() {if (TOOLTIP) {TOOLTIP.remove();TOOLTIP = null};}
+function moveToolTip() {
+    TOOLTIP.style.left = `${pointer.clientX + 10}px`;
+    TOOLTIP.style.top = `${pointer.clientY + 10}px`;
+}
+const intersections = [];
+const satelliteData = {{ satellites | safe }};
+const groundStationsData = {{ groundStations| safe }};
+function createSatellitesFromData(satellites) {
+    const satelliteObjects = [];
+    const trajectories = [];
+    satellites.forEach((satData, index) => {
+        const semiMajorAxis = satData.semiMajorAxis;
+        const eccentricity = satData.eccentricity;
+        const inclination = satData.inclination * Math.PI / 180;
+        const raan = satData.raan * Math.PI / 180;
+        const argPeriapsis = satData.argPeriapsis * Math.PI / 180;
+        const trueAnomaly = satData.trueAnomaly * Math.PI / 180;
+        const color = parseInt(satData.color.replace('#', '0x'));
+        const satellite = new SatelliteSprite(color);
+        satellite.name = satData.name;
+        satellite.setState(elementsToState(
+            semiMajorAxis, 
+            eccentricity, 
+            inclination, 
+            argPeriapsis, 
+            raan, 
+            trueAnomaly
+        ));
+        scene.add(satellite);
+        satellite.position.set(
+            satellite.state[0] * KM2S, 
+            satellite.state[1] * KM2S, 
+            satellite.state[2] * KM2S);
+        satelliteObjects.push(satellite);
+        const trajectory = new EciTrajectory(propagator, color);
+        scene.add(trajectory);
+        trajectory.generateTrajectory(satellite.getStateDeepCopy());
+        trajectories.push(trajectory);
+        intersections.push(satellite)
+    });
+    return { satellites: satelliteObjects, trajectories: trajectories };
+}
+const { 
+    satellites: dynamicSatellites, 
+    trajectories: dynamicTrajectories } = createSatellitesFromData(satelliteData);
+
+function createGroundStationsFromData(radars) {
+    const radarObjects = [];
+    radars.forEach((radarData, index) => {
+        const lat = radarData.lat;
+        const lon = radarData.lon;
+        const start_r = radarData.start_r;
+        const end_r = radarData.end_r;
+        const dPhi = radarData.dPhi;
+        const dTheta = radarData.dTheta;
+        const name = radarData.name;
+        const color = parseInt(radarData.color.replace('#', '0x'));
+        const groundStation = new GroundStation(
+            lat, 
+            lon, 
+            start_r, 
+            end_r, 
+            dPhi, 
+            dTheta, 
+            name, 
+            color
+        );
+        earth.add(groundStation);
+        radarObjects.push(groundStation);
+        intersections.push(groundStation.baseMesh);
+    });
+    return radarObjects;
+}
+const dynamicGroundStations = createGroundStationsFromData(groundStationsData);
+
+
+
+// LAMBERT
+// ==================================================================================
+const MU_EARTH = 398600.4418; // i have this defined in like 100 places
+const tof = 3600*4; 
+let inCoastPhase = false;
+let coastTime = 0;
+let lamberTArrivalVel;
+
+
+
+// BELLS AND WHISTLES
+// ==================================================================================
+const pmc = new PointInMeshChecker();
+const li = new LineIndicator(0x90EE90);
+const chs = new CrossHairSprite(0xADD8E6);
+scene.add(li);
+scene.add(chs);
+const lkf = new LinearKalmanFilter(500, 1);
+const kfpoints = new DynPoints(100, 0xADD8E6);
+scene.add(kfpoints);
+logger.log("ready", "green");
+const uc = new UmbraChecker();
+
+
+
+// ANIMATE
+// ==================================================================================
+
+const simDt = 2;
+let simStep = 1;                // every thing happens in seconds ¯\_(ツ)_/¯
+let simPlay = false;
+let simTime = 0;
+
+let lamberBurnInSun = true;
+let lamberBurnReset = true;
+
+const logSimTimer  = 60*60;     // log every n seconds in sim time 
+const logRadarSimTimer = 60*30;
+const radarTimer   = 60;
+
+const elapsedTimeLabel = document.getElementById('elapsed-time');
+
+function animate() {
+    const dt = clock.getDelta();
+    const time = clock.getElapsedTime();
+    
+    if (simPlay) {
+        for(let i = 0; i < simStep; i += 1) {
+
+            earth.rotation.y += simDt * EOMEGA;
+            simTime += simDt;
+
+            dynamicSatellites.forEach(satellite => {
+                satellite.position.set(
+                    satellite.state[0] * KM2S,
+                    satellite.state[1] * KM2S,
+                    satellite.state[2] * KM2S
+                );
+                propagator.step(satellite.state, simDt);
+            });
+
+            const chaser = dynamicSatellites[0];
+            const target = dynamicSatellites[1];
+            const grndst = dynamicGroundStations[0];
+
+            li.setEndpoints(
+                target.state[0]*KM2S, target.state[1]*KM2S, target.state[2]*KM2S,
+                chaser.state[0]*KM2S, chaser.state[1]*KM2S, chaser.state[2]*KM2S
+            );
+
+            grndst.setWorldPos();
+            if (uc.inUmbra(grndst.worldPos, sun.posNorm))
+            {
+                if (!pmc.notTracking){
+                    logger.log(`radar in sunlight`, "red");
+                    lamberBurnReset = true;
+                    kfpoints.setVisibilityAll(0);
+                }
+                pmc.notTracking = true;
+                grndst.mesh.visible = false;
+                grndst.frame.visible = false;
+                chs.visible = false;
+                kfpoints.visible = false;
+                lamberBurnInSun = true;
+            }
+            else{
+                if (pmc.notTracking){
+
+                    logger.log(`radar in shadow`, "green");
+                    dynamicSatellites[0].state[3] += gaussianRandom(0,.05); 
+                    dynamicSatellites[0].state[4] += gaussianRandom(0,.2);
+                    dynamicSatellites[0].state[5] += gaussianRandom(0,.05);
+                    logger.log(`chaser in shadow, chnaged dV`, "red");
+                    dynamicTrajectories[0].generateTrajectory(dynamicSatellites[0].state);  
+                }
+                pmc.notTracking = false;
+                grndst.mesh.visible = true;
+                grndst.frame.visible = true;
+                chs.visible = true;
+                kfpoints.visible = true;
+                lamberBurnInSun = false;
+            }
+
+
+            // LAMBERT
+            // ==================================================================================
+            if (lamberBurnInSun)
+            {
+                if (lamberBurnReset)
+
+                {
+                    lamberBurnReset = false;
+                    coastTime = 0;
+                    const chaser = dynamicSatellites[0];
+                    const target = dynamicSatellites[1];
+                    // prop to future time
+                    const futureTarget = dynamicSatellites[1].getStateDeepCopy();
+                    for (let t=0;t<tof;t+=1){propagator.step(futureTarget,1);}
+
+                    logger.log(`future target pos: ${Math.floor(futureTarget[0])}, ${Math.floor(futureTarget[1])}, ${Math.floor(futureTarget[2])}[km]`);
+                    // get vectors and solve lambert
+                    const r1 = new VectorL3(chaser.state[0],chaser.state[1],chaser.state[2]);
+                    const r2 = new VectorL3(futureTarget[0], futureTarget[1], futureTarget[2]);
+                    const result = vallado2013(MU_EARTH, r1, r2, tof, {
+                        prograde: true,
+                        fullOutput: true
+                    });
+                    // initial velocity to get to r2, lamberTArrivalVel is the velocity it will arrive with
+                    const initialVelocity = result.v1.toArray();
+                    lamberTArrivalVel = result.v2.toArray();
+                    // the square distance between two vel vectors is both the error and dV in this case
+                    const dV = leastSquaresPosError(
+                        chaser.state[3],chaser.state[4],chaser.state[5],initialVelocity[0],initialVelocity[1],initialVelocity[2]);
+                    logger.log(`lambert burn tof: ${tof}[s], |dV|: ${dV}[m/s]`, "yellow");
+                    // set actual orbit
+                    dynamicSatellites[0].state[3] = initialVelocity[0];
+                    dynamicSatellites[0].state[4] = initialVelocity[1];
+                    dynamicSatellites[0].state[5] = initialVelocity[2];      
+                    // update eci plot
+                    dynamicTrajectories[0].generateTrajectory(dynamicSatellites[0].state);     
+                    inCoastPhase = true;
+                }
+            }
+            if (inCoastPhase)
+            {
+                coastTime+=simDt;
+                if (coastTime===tof){
+                    const chaser = dynamicSatellites[0];
+                    const target = dynamicSatellites[1];
+                    inCoastPhase=false;
+                    logger.log(`reached lambert arrival, ${tof}[s], after burn`);
+                    logger.log(`chaser pos, ${Math.floor(chaser.state[0])}, ${Math.floor(chaser.state[1])}, ${Math.floor(chaser.state[2])}`, "green");
+                    logger.log(`target pos, ${Math.floor(target.state[0])}, ${Math.floor(target.state[1])}, ${Math.floor(target.state[2])}`, "yellow");
+                    const errorInPos = leastSquaresPosError(
+                        chaser.state[0], chaser.state[1], chaser.state[2],
+                        target.state[0], target.state[1], target.state[2]
+                    );
+                    logger.log(`reached lambert arrival, ${tof}[s], after burn`, "yellow");
+                    logger.log(`error in pos, ${Math.floor(errorInPos)}[km]`, "red");
+                    // we reached our target (hopefully) - take on their velocity
+                    const dV = 1000*leastSquaresPosError(
+                        chaser.state[3], chaser.state[4], chaser.state[5],
+                        target.state[3], target.state[4], target.state[5]
+                    );
+                    logger.log(`|dV| to match target sat, ${Math.floor(dV)}[m]`, "red");
+                    dynamicSatellites[0].state[3] = target.state[3];
+                    dynamicSatellites[0].state[4] = target.state[4];
+                    dynamicSatellites[0].state[5] = target.state[5];  
+                    dynamicTrajectories[0].generateTrajectory(dynamicSatellites[0].state);
+                }
+
+            }
+            // ==================================================================================
+            pmc.setPointWorld(chaser.state[0] * KM2S, chaser.state[1] * KM2S,chaser.state[2] * KM2S);
+            pmc.inMesh = false;
+            pmc.isPointInsideMesh(grndst.mesh);
+            if(pmc.inMesh)
+            {
+                if (simTime % radarTimer === 0)
+                {
+                    lkf.predict( simDt );
+                    const prdct = lkf.getPrediction(simDt);
+                    const noisyX = chaser.state[0]+gaussianRandom(0,500);
+                    const noisyY = chaser.state[1]+gaussianRandom(0,500);
+                    const noisyZ = chaser.state[2]+gaussianRandom(0,500);
+                    lkf.update(noisyX, noisyY, noisyZ);
+                    kfpoints.cyclePos(noisyX * KM2S, noisyY * KM2S, noisyZ * KM2S);
+                    chs.position.set(prdct[0] * KM2S, prdct[1] * KM2S, prdct[2] * KM2S);
+                    const radarError = leastSquaresPosError(
+                        noisyX, noisyY, noisyZ,
+                        chaser.state[0], chaser.state[1], chaser.state[2]
+                    );
+                    const filterError = leastSquaresPosError(
+                        prdct[0], prdct[1], prdct[2],
+                        chaser.state[0], chaser.state[1], chaser.state[2]
+                    );
+                    if (simTime % logRadarSimTimer === 0)
+                    {
+                        logger.log(`radar error, ${Math.floor(radarError)}[km]`, "yellow"); 
+                        logger.log(`filter error, ${Math.floor(filterError)}[km]`,);
+                    }
+                }
+            }
+            else{chs.visible = false; kfpoints.visible = false;}
+            if (simTime % logSimTimer === 0)
+            {
+                if (pmc.inMesh){logger.log(`chaser in radar`, "green"); }
+                else{logger.log(`chaser not in radar`); }
+            }
+        } 
+        elapsedTimeLabel.textContent = Math.floor(simTime/60);
+    }
+
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObjects(intersections, false);
+    if (intersects.length > 0) {
+        if (INTERSECTED != intersects[0].object) {
+            if (INTERSECTED) { removeToolTip(); }
+            INTERSECTED = intersects[0].object;
+            
+            if (INTERSECTED.objectToolTip) {
+                createToolTip(INTERSECTED.name);
+            }
+        } else {
+            if (TOOLTIP) { moveToolTip(); }
+        }
+    } else {
+        if (INTERSECTED) { removeToolTip(); }
+        INTERSECTED = null;
+    }
+    stats.update();
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+animate();
+
+
+
+
+// EVENT LISTENER(S)
+// ==================================================================================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function onPointerMove(event) {
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    pointer.clientX = event.clientX;
+    pointer.clientY = event.clientY;
+}
+
+window.addEventListener( 'pointermove', onPointerMove );
+window.addEventListener("click", function() {
+    if (INTERSECTED)
+    {
+        INTERSECTED.handleObjectClick()
+    }
+});
+
+// SIMULATION SLIDER
+// ==================================================================================
+const playPauseBtn = document.getElementById("play-pause");
+const fastForwardBtn = document.getElementById("fast-forward");
+const backwardBtn = document.getElementById("backward");
+const stepSizeSpan = document.getElementById("step-size");
+const playPauseSpan = document.getElementById("play-pause-span");
+
+playPauseBtn.addEventListener("click", () => {
+    simPlay = !simPlay;
+    if (simPlay){ playPauseSpan.textContent = "Play"; }
+    else{ playPauseSpan.textContent = "Pause"; }
+});
+
+fastForwardBtn.addEventListener("click", () => {
+    simPlay = true;
+    simStep += 10;
+    if (simStep > 100) { simStep = 100; }
+    updateStepSize(simStep);
+});
+
+backwardBtn.addEventListener("click", () => {
+    simPlay = true;
+    if (simStep - 10 > 0) simStep -= 10;
+    updateStepSize(simStep);
+});
+
+let elePos = null;
+let fixedNum = null;
+
+document.body.addEventListener('mousedown', (e) => {
+    const target = e.target;
+    if (target.hasAttribute('data-contentdraggable')) {
+        elePos = e.clientX;
+        fixedNum = parseFloat(target.textContent.replace(/[^\d.]/g, '')) || 1;
+
+        function onMouseMove(ev) {
+            dragNumber(target, ev);
+        }
+
+        function onMouseUp() {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            elePos = null;
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    }
+});
+
+function dragNumber(ele, event) {
+    const currentX = event.clientX;
+    const minNumber = parseFloat(ele.dataset.minnum) || 0;
+    const maxNumber = parseFloat(ele.dataset.maxnum) || 100;
+    const step = parseFloat(ele.dataset.step) || 1;
+
+    if (elePos !== null) {
+        let delta = Math.round((currentX - elePos) / 5) * step;
+        let num = fixedNum + delta;
+
+        if (num < minNumber) num = minNumber;
+        if (num > maxNumber) num = maxNumber;
+
+        updateStepSize(num);
+    }
+}
+
+function updateStepSize(num) {
+    simStep = num;
+    stepSizeSpan.textContent = `step Size = ${simStep}`;
+}
+
+    </script>
+</body>
+</html>

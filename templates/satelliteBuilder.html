@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Satellite Builder & Simulation</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link rel="stylesheet" href="/static/styles/styles.css">
+    <style>
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="control-panel">
+        <div class="control-tabs">
+            <button class="tab-button active" data-tab="satellite">Satellite</button>
+            <button class="tab-button" data-tab="radar">Radar</button>
+            <button class="tab-button" data-tab="list">List</button>
+        </div>
+        
+        <!-- Satellite Tab -->
+        <div id="satellite-tab" class="tab-content active">
+            <div class="control-item">
+                <label>Satellite Name:</label>
+                <input type="text" id="sat-name" value="Satellite 1">
+            </div>
+            <div class="control-item">
+                <label>Color:</label>
+                <input type="color" id="sat-color" value="#ff0000">
+            </div>
+            <div class="control-item">
+                <label>Semi-major axis (km):</label>
+                <input type="number" id="semi-major" value="6778" step="100" data-minnum="6378" data-maxnum="50000" data-step="100">
+            </div>
+            <div class="control-item">
+                <label>Eccentricity:</label>
+                <input type="number" id="eccentricity" value="0.0" step="0.01" min="0" max="0.99" data-minnum="0" data-maxnum="0.99" data-step="0.01">
+            </div>
+            <div class="control-item">
+                <label>Inclination (deg):</label>
+                <input type="number" id="inclination" value="0.0" step="1" data-minnum="0" data-maxnum="180" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>RAAN (deg):</label>
+                <input type="number" id="raan" value="0" step="1" data-minnum="0" data-maxnum="360" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>Arg of Periapsis (deg):</label>
+                <input type="number" id="arg-periapsis" value="0" step="1" data-minnum="0" data-maxnum="360" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>True Anomaly (deg):</label>
+                <input type="number" id="true-anomaly" value="0" step="1" data-minnum="0" data-maxnum="360" data-step="1">
+            </div>
+            <div class="control-item">
+                <div class="control-buttons">
+                    <button id="preview-btn">Preview</button>
+                    <button id="create-btn">Create</button>
+                </div>
+                <button class="reset-button" id="reset-btn">Reset to Defaults</button>
+            </div>
+            
+            <div class="control-item">
+                <label>Quick Presets:</label>
+                <div class="preset-circles">
+                    <div class="preset-item">
+                        <div class="preset-circle leo" data-preset="leo" title="Low Earth Orbit"></div>
+                        <span>LEO</span>
+                    </div>
+                    <div class="preset-item">
+                        <div class="preset-circle meo" data-preset="meo" title="Medium Earth Orbit"></div>
+                        <span>MEO</span>
+                    </div>
+                    <div class="preset-item">
+                        <div class="preset-circle geo" data-preset="geo" title="Geostationary Orbit"></div>
+                        <span>GEO</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Radar Tab -->
+        <div id="radar-tab" class="tab-content">
+            <div class="control-item">
+                <label>Radar Name:</label>
+                <input type="text" id="radar-name" value="Radar 1">
+            </div>
+            <div class="control-item">
+                <label>Color:</label>
+                <input type="color" id="radar-color" value="#1e90ff">
+            </div>
+            <div class="control-item">
+                <label>Latitude (deg):</label>
+                <input type="number" id="radar-lat" value="0" step="1" data-minnum="-90" data-maxnum="90" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>Longitude (deg):</label>
+                <input type="number" id="radar-lon" value="0" step="1" data-minnum="-180" data-maxnum="180" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>Start Range (km):</label>
+                <input type="number" id="radar-start-r" value="0.75" step="0.01" data-minnum=".01" data-maxnum="10" data-step="0.01">
+            </div>
+            <div class="control-item">
+                <label>End Range (km):</label>
+                <input type="number" id="radar-end-r" value="4.5" step="0.1" data-minnum="0.1" data-maxnum="20" data-step="0.1">
+            </div>
+            <div class="control-item">
+                <label>Azimuth Width (deg):</label>
+                <input type="number" id="radar-dphi" value="7" step="1" data-minnum="1" data-maxnum="360" data-step="1">
+            </div>
+            <div class="control-item">
+                <label>Elevation Width (deg):</label>
+                <input type="number" id="radar-dtheta" value="12" step="1" data-minnum="1" data-maxnum="180" data-step="1">
+            </div>
+            <div class="control-item">
+                <div class="control-buttons">
+                    <button id="radar-preview-btn">Preview</button>
+                    <button id="radar-create-btn">Create</button>
+                </div>
+                <button class="reset-button" id="radar-reset-btn">Reset to Defaults</button>
+            </div>
+        </div>
+
+
+        <div id="list-tab" class="tab-content">
+            <div class="list-container">
+                <div class="list-section">
+                    <h4>Satellites</h4>
+                    <div id="satellite-list" class="item-list"></div>
+                </div>
+                <div class="list-section">
+                    <h4>Radars</h4>
+                    <div id="radar-list" class="item-list"></div>
+                </div>
+            </div>
+        </div>
+
+
+        <button class="launch-button" id="launch-sim-btn">Run Sim</button>
+
+        <div class="export-dropdown" id="export-dropdown">
+            <button class="export-button" id="export-btn">Export Model ▼</button>
+            <div class="export-options" id="export-options">
+                <button id="copy-json-btn">Copy JSON</button>
+                <button id="download-json-btn">Download JSON</button>
+            </div>
+        </div>
+
+    </div>
+    <script src="{{url_for('static',filename='jsrc/three.module.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/OrbitControls.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/stats.module.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/Physics.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/EarthComponent.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/SunComponent.js')}}"></script>
+    <script src="{{url_for('static',filename='jsrc/SpaceModeling.js')}}"></script>
+    <script type="module">
+
+// BASIC SETUP
+// ==================================================================================
+
+const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, .0001, 10000);
+camera.position.set(1, 2, 3);
+const scene = new Scene();
+const group = new Group();
+scene.add(group);
+scene.background = new Color(0.5 * .025, 0.7 * .025, 0.9 * .025);
+
+const renderer = new WebGLRenderer({ antialias: true, canvas: document.getElementById("canvas") });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+
+const clock = new Clock();
+const stats = new Stats();
+stats.showPanel( 0 );
+document.body.appendChild( stats.dom );
+
+
+// MODEL
+// ==================================================================================
+
+//untis
+const KM2S   = 1/10000;         // km to scene units
+const EOMEGA = 0.00007292115;   // 2pi/sidereal
+
+//sun
+const sunPosition = new Vector3(1500, 150, 500);
+const sun = new Sun();
+sun.setPosition(sunPosition);
+sun.setModelOne(
+    '/static/assets/lens_flare_1.jpeg',
+    '/static/assets/lens_flare_circle_64x64.jpeg',
+    '/static/assets/lens_flare_hexagon_256x256.jpeg'
+);
+scene.add( new AmbientLight( 0x222222, 4 ) );
+scene.add(sun);
+
+//earth
+// const earth = new Earth3d(camera);
+// earth.loadTextures(
+//     '/static/assets/8081_earthmap10k.jpg',
+//     '/static/assets/8081_earthlights10k.jpg');
+// scene.add( earth );
+// earth.setSun(sunPosition);
+// scene.add(earth);
+const earthTexture = new TextureLoader().load('static/assets/uv_map_with_borders.png')
+const earthMat = new MeshPhongMaterial( {
+    map: earthTexture,
+    color: 0xffffff, 
+    flatShading: true,
+    transparent: true,
+    opacity: 0.9,
+} );
+const earth = new Mesh( new SphereGeometry( 6378*KM2S, 12, 8 ), earthMat );
+scene.add( earth );
+
+//propagator
+const propagator = new RK45Propagator();
+
+//builders
+const radarBuilder = new RadarBuilder(scene);
+const satelliteBuilder = new SatelliteBuilder(scene, propagator);
+
+
+// RAYCASTING
+// ==================================================================================
+const raycaster = new Raycaster();
+let INTERSECTED;
+let TOOLTIP;
+const pointer = new Vector2();
+pointer.clientX = 0;
+pointer.clientY = 0;
+function createToolTip(text) {
+    TOOLTIP = document.createElement("div");
+    TOOLTIP.className = "tooltip";
+    TOOLTIP.textContent = text;
+    document.body.appendChild(TOOLTIP);
+}
+
+function removeToolTip() {
+    if (TOOLTIP) {TOOLTIP.remove();TOOLTIP = null};
+}
+
+function moveToolTip() {
+    TOOLTIP.style.left = `${pointer.clientX + 10}px`;
+    TOOLTIP.style.top = `${pointer.clientY + 10}px`;
+}
+
+const intersections = [satelliteBuilder.previewSat];
+radarBuilder.setIntersections(intersections);
+
+
+function animate() {
+    const dt = clock.getDelta();
+    const time = clock.getElapsedTime();
+
+    raycaster.setFromCamera( pointer, camera );
+    const intersects = raycaster.intersectObjects( intersections, false );
+    if ( intersects.length > 0 ) {
+        if ( INTERSECTED != intersects[ 0 ].object ) {
+
+            if ( INTERSECTED ){ removeToolTip(); }; 
+            INTERSECTED = intersects[ 0 ].object;
+
+            if (INTERSECTED.objectToolTip) {
+                createToolTip(INTERSECTED.name)
+            }
+        }
+        else
+        {
+            if (TOOLTIP){moveToolTip();}
+        }
+    } else {
+        if ( INTERSECTED ) {removeToolTip();};
+        INTERSECTED = null;
+    }
+
+    stats.update();
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+animate();
+
+// EVENT LISTENER(S)
+// ==================================================================================
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function onPointerMove(event) {
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    pointer.clientX = event.clientX;
+    pointer.clientY = event.clientY;
+}
+
+window.addEventListener( 'pointermove', onPointerMove );
+window.addEventListener("click", function() {
+    if (INTERSECTED)
+    {
+        INTERSECTED.handleObjectClick()
+    }
+});
+
+
+// API
+// ==================================================================================
+async function launchSimulation(satelliteData, radarData) {
+    try {
+        const response = await fetch('/launch-sim', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                satellites: satelliteData,
+                groundStations: radarData
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            console.log('Simulation launched successfully:', result.message);
+
+            const successMessage = document.createElement('div');
+            successMessage.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1000;
+            `;
+            successMessage.textContent = ' - Loading viewer...';
+            document.body.appendChild(successMessage);
+            
+            setTimeout(() => {window.location.href = '/runModel';}, 500);
+
+        } else {
+            console.error('Launch failed:', result.message);
+            alert('Launch failed: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error launching simulation:', error);
+        alert('Error launching simulation: ' + error.message);
+    }
+}
+
+document.getElementById('launch-sim-btn').addEventListener('click', () => {
+    launchSimulation(satelliteBuilder.getAllSatelliteData(), radarBuilder.getAllRadarData());
+});
+
+
+// PRESET AND HTML HANDLING
+// ==================================================================================
+const ORBIT_PRESETS = {
+    leo: {
+        name: "LEO",
+        color: "#ff6b6b",
+        semiMajorAxis: 6778,
+        eccentricity: 0.0,
+        inclination: 0.0,
+        raan: 0,
+        argPeriapsis: 0,
+        trueAnomaly: 0
+    },
+    meo: {
+        name: "GPS",
+        color: "#4ecdc4",
+        semiMajorAxis: 26560,
+        eccentricity: 0.0,
+        inclination: 0.0,
+        raan: 0,
+        argPeriapsis: 0,
+        trueAnomaly: 0
+    },
+    geo: {
+        name: "GEO",
+        color: "#45b7d1",
+        semiMajorAxis: 42164,
+        eccentricity: 0.0,
+        inclination: 0.0,
+        raan: 0,
+        argPeriapsis: 0,
+        trueAnomaly: 0
+    }
+};
+
+function loadPreset(presetName) {
+    const preset = ORBIT_PRESETS[presetName];
+    if (!preset) return;
+    document.getElementById('sat-name').value = preset.name+` ${satelliteIndex}`;
+    // document.getElementById('sat-color').value = preset.color;
+    document.getElementById('semi-major').value = preset.semiMajorAxis;
+    document.getElementById('eccentricity').value = preset.eccentricity;
+    document.getElementById('inclination').value = preset.inclination;
+    document.getElementById('raan').value = preset.raan;
+    document.getElementById('arg-periapsis').value = preset.argPeriapsis;
+    document.getElementById('true-anomaly').value = preset.trueAnomaly;
+
+    satelliteBuilder.updatePreviewPosition();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+
+    document.querySelectorAll('.preset-circle').forEach(circle => {
+        circle.addEventListener('click', function() {
+            const presetName = this.dataset.preset;
+            loadPreset(presetName);
+        });
+    });
+});
+
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.getAttribute('data-tab');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(targetTab + '-tab').classList.add('active');
+        });
+    });
+});
+
+
+function hidePreviews() {
+    if (previewActive) {
+        previewActive = false;
+        document.getElementById('preview-btn').classList.remove('active');
+        document.getElementById('preview-btn').textContent = 'Preview';
+        satelliteBuilder.hidePreview();
+    }
+     
+    if (radarPreviewActive) {
+        radarPreviewActive = false;
+        document.getElementById('radar-preview-btn').classList.remove('active');
+        document.getElementById('radar-preview-btn').textContent = 'Preview';
+        radarBuilder.hidePreview();
+    }
+}
+
+
+let satelliteIndex = 1;
+let radarIndex = 1;
+
+
+const originalCreateHandler = document.getElementById('radar-create-btn');
+document.getElementById('radar-create-btn').addEventListener('click', () => {
+    const newRadar = radarBuilder.radars[radarBuilder.radars.length - 1];
+    if (newRadar) {intersections.push(newRadar.baseMesh);}
+    updateItemLists();
+    hidePreviews();
+    radarBuilder.resetToDefaults();
+    radarIndex += 1;
+    document.getElementById('radar-name').value = `Radar ${radarIndex}`;
+});
+
+document.getElementById('create-btn').addEventListener('click', () => {
+    intersections.push(satelliteBuilder.satellites[satelliteBuilder.satellites.length-1]);
+    updateItemLists();
+    hidePreviews();
+    satelliteBuilder.resetToDefaults();
+    satelliteIndex += 1;
+    document.getElementById('sat-name').value = `Satellite ${satelliteIndex}`;
+});
+
+
+let previewActive = false;
+
+document.getElementById('preview-btn').addEventListener('click', function() {
+    previewActive = !previewActive;
+    if (previewActive) {
+        this.classList.add('active');
+        this.textContent = 'Hide Preview';
+    } else {
+        this.classList.remove('active');
+        this.textContent = 'Preview';
+    }
+});
+
+
+let radarPreviewActive = false;
+
+document.getElementById('radar-preview-btn').addEventListener('click', function() {
+    radarPreviewActive = !radarPreviewActive;
+    if (radarPreviewActive) {
+        this.classList.add('active');
+        this.textContent = 'Hide Preview';
+    } else {
+        this.classList.remove('active');
+        this.textContent = 'Preview';
+    }
+});
+
+function updateItemLists() {
+    updateSatelliteList();
+    updateRadarList();
+}
+
+function updateSatelliteList() {
+    const satelliteList = document.getElementById('satellite-list');
+    satelliteList.innerHTML = '';
+    satelliteBuilder.satellites.forEach((satellite, index) => {
+        const listItem = document.createElement('div');
+        listItem.className = 'list-item';
+        listItem.innerHTML = `
+            <div class="list-item-dot" style="background-color: ${satellite.material.color.getHexString() ? '#' + satellite.material.color.getHexString() : '#ff0000'}"></div>
+            <span class="list-item-name">${satellite.name || `Satellite ${index + 1}`}</span>
+        `;
+        // listItem.addEventListener('click', () => {
+        // });
+        satelliteList.appendChild(listItem);
+    });
+}
+
+function updateRadarList() {
+    const radarList = document.getElementById('radar-list');
+    radarList.innerHTML = '';
+    radarBuilder.radars.forEach((radar, index) => {
+        const listItem = document.createElement('div');
+        listItem.className = 'list-item';
+        listItem.innerHTML = `
+            <div class="list-item-dot" style="background-color: ${"#"+radar.mesh.material.color.getHexString() || '#1e90ff'}"></div>
+            <span class="list-item-name">${radar.name || `Radar ${index + 1}`}</span>
+        `;
+        // listItem.addEventListener('click', () => {
+        // });
+        radarList.appendChild(listItem);
+    });
+}
+
+
+// SLIDER
+// ==================================================================================
+
+let elePos = null;
+let fixedNum = null;
+let currentElement = null;
+function dragNumber(ele, event) {
+    const currentX = event.clientX;
+    const minNumber = parseFloat(ele.dataset.minnum) || 0;
+    const maxNumber = parseFloat(ele.dataset.maxnum) || 100;
+    const step = parseFloat(ele.dataset.step) || 1;
+
+    if (elePos !== null) {
+        let delta = Math.round((currentX - elePos) / 5) * step;
+        let num = fixedNum + delta;
+
+        if (num < minNumber) num = minNumber;
+        if (num > maxNumber) num = maxNumber;
+
+        ele.value = num;
+        
+        ele.dispatchEvent(new Event('input'));
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const numberInputs = document.querySelectorAll('input[type="number"]');
+    
+    numberInputs.forEach(input => {
+        input.addEventListener('mousedown', function(e) {
+            currentElement = this;
+            elePos = e.clientX;
+            fixedNum = parseFloat(this.value);
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            e.preventDefault();
+        });
+    });
+
+    updateItemLists();
+});
+
+function handleMouseMove(e) {
+    if (currentElement) {
+        dragNumber(currentElement, e);
+    }
+}
+
+function handleMouseUp() {
+    elePos = null;
+    fixedNum = null;
+    currentElement = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+}
+
+
+
+// JSON STUFF
+// ==================================================================================
+function getModelData() {
+    return {
+        satellites: satelliteBuilder.getAllSatelliteData(),
+        groundStations: radarBuilder.getAllRadarData()
+    };
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('JSON copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showNotification('Failed to copy to clipboard', 'error');
+    });
+}
+
+function downloadJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification('JSON file downloaded!', 'success');
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        border-radius: 5px;
+        color: white;
+        z-index: 2000;
+        font-size: 12px;
+        background: ${type === 'success' ? 'rgba(0,200,0,0.8)' : 'rgba(200,0,0,0.8)'};
+        border: 1px solid ${type === 'success' ? '#00ff00' : '#ff0000'};
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+document.getElementById('export-btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    const dropdown = document.getElementById('export-dropdown');
+    dropdown.classList.toggle('show');
+});
+
+document.getElementById('copy-json-btn').addEventListener('click', function() {
+    const data = getModelData();
+    copyToClipboard(JSON.stringify(data, null, 2));
+    document.getElementById('export-dropdown').classList.remove('show');
+});
+
+document.getElementById('download-json-btn').addEventListener('click', function() {
+    const data = getModelData();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    downloadJSON(data, `satellite-model-${timestamp}.json`);
+    document.getElementById('export-dropdown').classList.remove('show');
+});
+
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('export-dropdown');
+    if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('show');
+    }
+});
+
+
+    </script>
+</body>
+</html>

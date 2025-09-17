@@ -1,0 +1,530 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.tooltip {
+    position: absolute;
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    font: 12px sans-serif;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+.control-panel {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 5px;
+    padding: 15px;
+    min-width: 200px;
+    color: wheat;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(5px);
+    z-index: 1;
+}
+
+.control-item {
+    margin-bottom: 10px;
+}
+
+.control-item:last-child {
+    margin-bottom: 0;
+}
+
+.control-item label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+}
+
+.control-item input {
+    width: 100%;
+    padding: 4px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.3);
+    color: wheat;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+
+.control-item input[type="color"] {
+    height: 30px;
+    padding: 2px;
+}
+
+.control-item input[type="number"] {
+    cursor: ew-resize;
+    user-select: none;
+}
+
+.control-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.control-buttons button {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(0,100,200,0.6);
+    color: wheat;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.control-buttons button:hover {
+    background: rgba(0,150,255,0.8);
+}
+
+.reset-button {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(0,100,200,0.6);
+    color: wheat;
+    cursor: pointer;
+    font-size: 11px;
+    margin-top: 10px;
+}
+
+.reset-button:hover {
+    background: rgba(0,150,255,0.8);
+}
+
+.launch-button {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(200,100,0,0.6);
+    color: wheat;
+    cursor: pointer;
+    font-size: 11px;
+    margin-top: 10px;
+}
+
+.launch-button:hover {
+    background: rgba(255,150,0,0.8);
+}
+
+.preset-section {
+    border-top: 1px solid rgba(255,255,255,0.2);
+    padding-top: 10px;
+    margin-top: 10px;
+}
+
+.preset-circles {
+    display: flex;
+    justify-content: space-around;
+    gap: 15px;
+    margin-bottom: 0;
+}
+
+.preset-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.preset-circle {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.preset-circle:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 8px rgba(255,255,255,0.4);
+}
+
+.preset-circle.leo {
+    background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+}
+
+.preset-circle.meo {
+    background: linear-gradient(135deg, #4ecdc4, #6ee8df);
+}
+
+.preset-circle.geo {
+    background: linear-gradient(135deg, #45b7d1, #5dade2);
+}
+
+.preset-item span {
+    font-size: 10px;
+    color: wheat;
+}
+
+#sim-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 8px 14px;
+    border-radius: 14px;
+    backdrop-filter: blur(3px);
+    user-select: none;
+}
+
+.control-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.step-buttons {
+    display: flex;
+    gap: 2px;
+}
+
+.step-buttons button,
+#play-pause {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+#step-size,
+.control-block span {
+    color: #fff;
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+
+.control-tabs {
+    display: flex;
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.3);
+}
+
+.tab-button {
+    flex: 1;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.5);
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255,255,255,0.6);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+}
+
+.tab-button.active {
+    color: wheat;
+    border-bottom-color: #4ecdc4;
+    background: rgba(0,0,0,0.7);
+}
+
+.tab-button:hover {
+    color: wheat;
+    background: rgba(0,0,0,0.6);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.control-buttons button.active {
+    background: rgba(100, 200, 255, 0.8) !important;
+    border-color: #4ecdc4;
+}
+
+
+.control-panel input[type=number]::-webkit-inner-spin-button,
+.control-panel input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.control-panel input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.list-container {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.list-section {
+    margin-bottom: 15px;
+}
+
+.list-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: wheat;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 4px;
+}
+
+.item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.list-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 3px;
+    font-size: 11px;
+    color: wheat;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.list-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.list-item-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.list-item-name {
+    flex-grow: 1;
+}
+
+.export-button {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(200,100,0,0.6);
+    color: wheat;
+    cursor: pointer;
+    font-size: 11px;
+    margin-top: 5px;
+}
+
+.export-button:hover {
+    background: rgba(255,150,0,0.8);
+}
+
+.export-dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.export-options {
+    display: none;
+    position: absolute;
+    background: rgba(0,0,0,0.9);
+    min-width: 100%;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+    border-radius: 3px;
+    border: 1px solid #555;
+    bottom: 100%;
+    margin-bottom: 2px;
+}
+
+.export-options button {
+    color: wheat;
+    padding: 8px 12px;
+    text-decoration: none;
+    display: block;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.export-options button:hover {
+    background-color: rgba(100,200,0,0.3);
+}
+
+.export-dropdown.show .export-options {
+    display: block;
+}
+
+
+#simulation-control-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: flex-end;  /* bottom-align blocks */
+    gap: 20px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 8px 14px;
+    border-radius: 14px;
+    backdrop-filter: blur(3px);
+    user-select: none;
+}
+
+.simulation-control-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.step-buttons {
+    display: flex;
+    gap: 2px;
+}
+
+.step-buttons button,
+#play-pause {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+#step-size,
+.simulation-control-block span {
+    color: #fff;
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.log-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: 1px solid rgba(222, 184, 135, 0.5);
+    border-radius: 5px;
+    padding: 7px;
+    min-width: 300px;
+    max-width: 400px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+    color: wheat;
+    font-family: monospace;
+    font-size: 10px;
+    z-index: 1000;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid rgba(222, 184, 135, 0.3);
+}
+
+.log-title {
+    font-weight: bold;
+    color: wheat;
+    font-size: 10px;
+}
+
+.log-header-buttons {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.log-clear {
+    color: rgba(222, 184, 135, 0.6);
+    cursor: pointer;
+    font-size: 9px;
+    transition: color 0.2s;
+    user-select: none;
+}
+
+.log-clear:hover {
+    color: #FF6B6B;
+}
+
+.log-toggle {
+    background: none;
+    border: none;
+    color: wheat;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+}
+
+.log-content {
+    max-height: 100px;
+    overflow-y: auto;
+    line-height: 1.0;
+}
+
+.log-content.collapsed {
+    display: none;
+}
+
+.log-entry {
+    margin-bottom: 2px;
+    word-wrap: break-word;
+}
+
+.log-green { color: #90EE90; }
+.log-red { color: #FF6B6B; }
+.log-yellow { color: #FFD93D; }
+.log-wheat { color: wheat; }
+
+
+.elapsed-time {
+    color: #fff;
+    padding: 4px 4px;
+}
+
+
+body.dragover {
+    background-color: rgba(0, 255, 0, 0.1) !important;
+}
+
+body.dragover::before {
+    content: "Drop JSON file anywhere to load satellites";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: wheat;
+    padding: 20px 40px;
+    border-radius: 10px;
+    z-index: 1000;
+    pointer-events: none;
+}

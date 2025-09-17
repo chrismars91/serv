@@ -1,0 +1,36 @@
+{
+    "satellites": [
+        {
+            "name": "red sat",
+            "color": "#FF0000",
+            "semiMajorAxis": 40164,
+            "eccentricity": 0.00,
+            "inclination": 0.3,
+            "raan": 0,
+            "argPeriapsis": 0,
+            "trueAnomaly": 0
+        },
+        {
+            "name": "green sat",
+            "color": "#ADD8E6",
+            "semiMajorAxis": 42164,
+            "eccentricity": 0.00,
+            "inclination": 3.0,
+            "raan": 0,
+            "argPeriapsis": 5,
+            "trueAnomaly": 0
+        }
+    ],
+    "groundStations": [
+        {
+            "name": "Ground Alpha",
+            "lat": 0,
+            "lon": 5,
+            "start_r": 0.75,
+            "end_r": 4.5,
+            "dPhi": 10,
+            "dTheta": 15,
+            "color": "#ADD8E6"
+        }
+    ]
+}

@@ -1,0 +1,56 @@
+{
+  "satellites": [
+    {
+      "name": "red sat",
+      "color": "#ff0000",
+      "semiMajorAxis": 15378,
+      "eccentricity": 0,
+      "inclination": 10,
+      "raan": 0,
+      "argPeriapsis": 90,
+      "trueAnomaly": 0
+    },
+    {
+      "name": "blue sat",
+      "color": "#0008ff",
+      "semiMajorAxis": 19678,
+      "eccentricity": 0,
+      "inclination": 0,
+      "raan": 0,
+      "argPeriapsis": 0,
+      "trueAnomaly": 0
+    },
+    {
+      "name": "green sat",
+      "color": "#00ff04",
+      "semiMajorAxis": 14678,
+      "eccentricity": 0,
+      "inclination": 90,
+      "raan": 45,
+      "argPeriapsis": 0,
+      "trueAnomaly": 0
+    }
+  ],
+  "groundStations": [
+    {
+      "name": "yellow radar",
+      "lat": 0,
+      "lon": 0,
+      "start_r": 0.16000000000000003,
+      "end_r": 1.6,
+      "dPhi": 12,
+      "dTheta": 99,
+      "color": "#fbff1f"
+    },
+    {
+      "name": "purple radar",
+      "lat": 15,
+      "lon": 145,
+      "start_r": 0.27,
+      "end_r": 1.7999999999999998,
+      "dPhi": 87,
+      "dTheta": 13,
+      "color": "#ff1fec"
+    }
+  ]
+}
